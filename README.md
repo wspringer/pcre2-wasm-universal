@@ -24,10 +24,8 @@ This fork addresses all these issues:
 ## Installation
 
 ```bash
-npm install ../pcre2-wasm-universal
+npm install pcre2-wasm-universal
 ```
-
-Or copy the package to your project.
 
 ## Usage
 

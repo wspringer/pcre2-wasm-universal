@@ -1,153 +1,105 @@
-# pcre2-wasm
+# pcre2-wasm-universal
 
-PCRE2 (Perl Compatible Regular Expressions) compiled to WebAssembly
+A universal (Node.js + browser) fork of [@stephen-riley/pcre2-wasm](https://github.com/stephen-riley/pcre2-wasm).
+
+This package provides PCRE2 (Perl Compatible Regular Expressions 2) compiled to WebAssembly, modified to work in both Node.js and browser environments.
+
+## Changes from Original
+
+The original `@stephen-riley/pcre2-wasm` package has several Node.js-specific dependencies that prevent it from working in browsers:
+
+1. **`libpcre2.js`** - Uses `require("path")` and `__dirname` to locate WASM file
+2. **`PCRE.js`** - Uses `require("assert")` for assertions
+3. **`PCRE.js`** - Uses `require("util").TextDecoder` instead of browser-native `TextDecoder`
+4. **`PCRE.js`** - Uses `Buffer.from(str, 'utf16le')` for UTF-16 encoding
+
+This fork addresses all these issues:
+
+- Removed Node.js-specific WASM file locator (browsers use `scriptDirectory` detection)
+- Replaced `require("assert")` with inline assertion function
+- Uses browser-native `TextDecoder('utf-16le')`
+- Replaced `Buffer.from()` with custom `encodeUTF16LE()` function
+- Converted to ESM module format
 
 ## Installation
 
 ```bash
-npm install @stephen-riley/pcre2-wasm
+npm install ../pcre2-wasm-universal
 ```
+
+Or copy the package to your project.
 
 ## Usage
 
-Internally this module uses the [PCRE2](https://pcre.org/) library, running
-in a WebAssembly instance. This has a side effect of requiring you do
-a few unusual things when using this module:
-
-### Initialization
-
-Before calling any constructors or methods, you must first asynchronously initialize the module by calling `init`.
-
 ```javascript
-import PCRE from '@stephen-riley/pcre2-wasm'
+import PCRE from 'pcre2-wasm-universal';
 
-async function main () {
-  await PCRE.init()
-  // make other PCRE calls...
-}
+// Initialize PCRE2 (required before first use)
+await PCRE.init();
 
-main()
+// Create a regex pattern
+const regex = new PCRE('\\d+');
+
+// Match against a string
+const result = regex.match('abc123def');
+console.log(result[0].match); // "123"
+
+// Clean up when done
+regex.destroy();
 ```
 
-### Memory Management
+## WASM File Location
 
-When you create a new `PCRE` instance, you are allocating memory within the
-WebAssembly instance. Currently, there are no hooks in JavaScript that
-let us automatically free this memory when the `PCRE` instance is garbage
-collected by the JavaScript runtime. This means that in order to prevent
-memory leaks, you must call `.destroy()` on a `PCRE` instance when it
-is no longer needed.
+In browser environments, the WASM file (`libpcre2.wasm`) needs to be served from the same directory as `libpcre2.js`. If using a bundler like Vite, you may need to configure it to handle the WASM file correctly.
+
+For Vite, you can use the `?url` import suffix or configure `assetsInclude` in `vite.config.js`:
+
+```javascript
+// vite.config.js
+export default {
+  assetsInclude: ['**/*.wasm'],
+  optimizeDeps: {
+    exclude: ['pcre2-wasm-universal']
+  }
+}
+```
 
 ## API
 
-```javascript
-import PCRE from '@stephen-riley/pcre2-wasm'
-```
-
 ### `PCRE.init()`
 
-Initializes the module, returning a Promise that is resolved once
-initialization is complete. You must call this at least once and await the
-returned Promise before calling any other `PCRE` methods or constructors.
-
-### `PCRE.version()`
-
-Returns a string with the PCRE2 version information.
+Initializes the PCRE2 WASM module. Must be called before creating any PCRE instances.
 
 ### `new PCRE(pattern, flags)`
 
-Creates a new PCRE instance, using `pcre2_compile()` to compile `pattern`,
-using `flags` as the compile options. You must call `.destroy()` on the
-returned instance when it is no longer needed to prevent memory leakage.
+Creates a new PCRE regex instance.
 
-- `pattern`: A string containing a Perl compatible regular expression.
-  Tip: use `String.raw` to avoid needing to escape backslashes.
-- `flags`: An optional string with each character representing an option.
-  Supported flags are `i`, `m`, `s`, and `x`. See
-  [perlre](http://perldoc.perl.org/perlre.html) for details.
+- `pattern` - The regex pattern string
+- `flags` - Optional flags string
 
-```javascript
-const pattern = String.raw`\b hello \s* world \b`
-const re = new PCRE(pattern, 'ix')
+### `pcre.match(subject, start)`
 
-// ...
+Matches the pattern against the subject string.
 
-re.destroy()
-```
+- `subject` - The string to match against
+- `start` - Optional starting offset (default: 0)
 
-In the event of a compilation error in the pattern or an unsupported flag, an `Error` will be thrown with an error message from PCRE2. Additionally, it will have an `offset` property indicating the character offset in `pattern` where the error was encountered.
+Returns match object with capture groups, or `null` if no match.
 
-```javascript
-let re
+### `pcre.matchAll(subject)`
 
-try {
-  re = new PCRE(String.raw`a)b`)
-}
-catch (err) {
-  console.error(`Compilation failed: ${err.message} at ${err.offset}.`)
-  // Prints: Compilation failed: unmatched closing parenthesis at 1.
-}
-```
+Returns all matches in the subject string.
 
-### `re.destroy()`
+### `pcre.substitute(subject, replacement, startOffset, options)`
 
-Releases the memory allocated in the WebAssembly instance. You must call this method manually once you no longer have a need for the instance, or else your program will leak memory.
+Performs regex substitution.
 
-### `re.match(subject, startOffset?)`
+### `pcre.destroy()`
 
-Match the `subject` against the regular expression, starting at `startOffset` if specified (otherwise, start at position 0).
+Frees WASM memory. Call when done with the regex instance.
 
-#### match output
+## License
 
-Returns an object that lists numbered and named captures, each with a `start`, `end`, and `match` field.
+MIT License - see [LICENSE](LICENSE)
 
-For example, matching `000123` against `/^(?<leading_zeros>0+).*$/` would result in the following object:
-
-```javascript
-{
-  length: 1,
-  0: { start: 0, end: 6, match: "000123" },
-  1: { start: 0, end: 4, match: "000" },
-  leading_zeros: { start: 0, end: 4, match: "000" }
-}
-```
-
-On no match, returns `null`.
-
-On an error, `throw`s an `Error` object whose string is a PCRE2 error name from `PCRE2.h`.
-
-### `re.matchAll(subject, startOffset?)`
-
-Returns an array of `re.match()` results.
-
-On no match, returns an empty array `[]`.
-
-On an error, `throw`s an `Error` object whose string is a PCRE2 error name from `PCRE2.h`.
-
-### `re.substitute(subject, replacement, startOffset?)`
-
-Performs a single substitution on `subject` against the regular expression, using `replacement`, starting at `startOffset` if specified (otherwise 0).
-
-Returns a string.
-
-On an error, `throw`s an `Error` object whose string is a PCRE2 error name from `PCRE2.h`.
-
-### `re.substituteAll(subject, replacement, startOffset?)`
-
-Performs all substitutions on `subject` against the regular expression, using `replacement`, starting at `startOffset` if specified (otherwise 0).
-
-Returns a string.
-
-On an error, `throw`s an `Error` object whose string is a PCRE2 error name from `PCRE2.h`.
-
-### `re.exec(subject, global?)`
-
-If `global` is specified and is truthy, will execute `matchAll()`; otherwise executes `match()`.
-
-## Contributing
-
-Prerequisites for development include Docker, `make`, and `curl`.  All emscripten compiles (via `emcc`) are done in docker containers to control the build environment.
-
-## Credits
-
-This is a fork of [desertnet/pcre](https://github.com/desertnet/pcre), which provided the emscripten framework and initial API exposure of PCRE2.  Many thanks!
+Original package by J. Stephen Riley.

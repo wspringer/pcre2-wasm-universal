@@ -5,8 +5,10 @@
   "type": "module",
   "main": "./src/PCRE.js",
   "module": "./src/PCRE.js",
+  "types": "./src/PCRE.d.ts",
   "exports": {
     ".": {
+      "types": "./src/PCRE.d.ts",
       "import": "./src/PCRE.js",
       "default": "./src/PCRE.js"
     },
@@ -38,5 +40,8 @@
   "homepage": "https://github.com/stephen-riley/pcre2-wasm#readme",
   "bugs": {
     "url": "https://github.com/stephen-riley/pcre2-wasm/issues"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
   }
 }
